@@ -1,9 +1,9 @@
-# Irrigation Timer sketch for Arduino
+## Irrigation Timer sketch for Arduino
 
 Arduino irrigation timer (24 hour) with Modbus serial communication.
 (based on modbus-master-slave library example)
 
-## Requires
+### Requires
 
 ##### Modbus Master-Slave library for Arduino
 https://github.com/smarmengol/Modbus-Master-Slave-for-Arduino
@@ -14,7 +14,7 @@ http://www.pjrc.com/teensy/td_libs_Time.html
 ##### S1307RTC Library for Arduino
 http://www.pjrc.com/teensy/td_libs_DS1307RTC.html
 
-## Register Table
+### Register Table
 
 ##### Time registers
 
