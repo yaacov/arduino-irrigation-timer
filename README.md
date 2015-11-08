@@ -64,7 +64,7 @@ register 8 control pins state from 00:15 to 00:30
 register 103 (last) control pins state from 23:45 to 24:00
 
 ###### example:
-to set pin 12 to high from 06:00 to 06:30 -
+to set pin 11 to high from 06:00 to 06:30 -
 
 set registers 31 and 32 to 0x0800
 
