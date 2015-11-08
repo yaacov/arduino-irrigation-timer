@@ -117,7 +117,7 @@ void io_setup() {
   bitWrite(au16data[5], 11, 1);
   bitWrite(au16data[5], 12, 1);
 
-  // use disk to init override register to use timer (no override)
+  // use disk to init override register 
   EEPROM.get(0, au16data[6]);
 
   /*  read timer table from disk (+7 user data registers)
@@ -207,7 +207,9 @@ void update_eeprom() {
   for (i = 0; i < (96 + 7); i++) {
     /*  EEPROM.put notes:
      *  1 - check value and write only if data change
-     *  2 - write site(data) number of bytes, size(unit_16_t) = 2
+     *  2 - write size(data) number of bytes, size(unit_16_t) = 2
+     *
+     *  timer table registers start at register number 7
      */
     EEPROM.put(2 + i * 2, au16data[i + 7]);
   }
