@@ -110,9 +110,9 @@ void update_eeprom() {
 }
 
 /**
- * Sync unit time.
+ * Set unit time.
  */
-void sync_unit_time() {
+void set_unit_time() {
     setTime(timeReg);
 
     // if unit has real time clock, update RTC
@@ -121,12 +121,12 @@ void sync_unit_time() {
 }
 
 /**
- * Sync time registers with unit clock.
+ * Update time registers to match unit clock.
  * 
  * register 0 - time msb.
  * register 1 - time lsb.
  */
-void sync_time_regisers() {
+void update_time_regisers() {
     
     // sync time registers to Arduino clock
     timeReg = now();
@@ -135,12 +135,15 @@ void sync_time_regisers() {
 }
 
 /**
- * update time registers with unit clock.
+ * Check time registers for clock set.
+ *
+ * if unit recived clock set request, set unit clock
+ * o/w update time registers
  * 
  * register 0 - time msb.
  * register 1 - time lsb.
  */
-void update_time_regisers() {
+void check_time_regisers() {
     uint32_t timeDelta;
 
     // update time registers
@@ -149,12 +152,12 @@ void update_time_regisers() {
 
     /*  if time registers are 1 min (60s) off from unit time
     *  set the unit time using the registers,
-    *  o/w set the registers to match unit time.
+    *  o/w update the time registers to match unit time.
     */
     if (timeDelta > 60) {
-        sync_unit_time();
+        set_unit_time();
     } else {
-        sync_time_regisers();
+        update_time_regisers();
     }
 }
 
@@ -168,13 +171,13 @@ void setup_time() {
     // if got time from RTC - set unit time and flag that unit has RTC.
     timeReg = RTC.get();
     if (timeReg) {
-        setTime(timeReg);
+        set_unit_time();
         hasRTC = true;
     }
     
     // set has real time clock register
     au16data[2] = hasRTC;
-    sync_time_regisers();
+    update_time_regisers();
 }
 
 /**
@@ -243,7 +246,7 @@ void loop() {
     au16data[4] = slave.getErrCnt();
 
     // update unit time registers and eeprom.
-    update_time_regisers();
+    check_time_regisers();
     update_eeprom();
 }
 
