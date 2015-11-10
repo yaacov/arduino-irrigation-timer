@@ -32,72 +32,17 @@
 // This is slave ID using control pin CTRL_PIN for RS485 communication
 Modbus slave(ID, 0, CTRL_PIN);
 int8_t state = 0;
-uint32_t tempus;
+uint32_t blinkTime;
 uint32_t timeReg;
-
 boolean has_RTC = false;
 
-/** 
- *  Unit time registers
- */
+// Unit time registers
 uint16_t au16data[NUM_REGISTERS];
 
 /**
- *  Setup procedure
- */
-void setup() {
-  io_setup(); // I/O settings
-
-  // check for RTC time
-  timeReg = RTC.get();
-
-  /*  if got time from RTC - set unit time and flag
-   *  that unit has RTC
-   */
-  if (timeReg) {
-    setTime(timeReg);
-    has_RTC = true;
-  }
-
-  // set has_RTC register
-  au16data[2] = has_RTC;
-  
-  // start communication
-  slave.begin(BAUD_RATE);
-
-  // blink for 100ms
-  tempus = millis() + 100;
-  digitalWrite(13, HIGH );
-}
-
-/**
- *  Loop procedure
- */
-void loop() {
-  // check timer for I/O pins 11 and 12
-  timer_poll(11);
-  timer_poll(12);
-
-  // poll messages
-  // blink led pin on each valid message
-  state = slave.poll(au16data, NUM_REGISTERS);
-
-  if (state > 4) {
-    tempus = millis() + 50;
-    digitalWrite(13, HIGH);
-  }
-  if (millis() > tempus) digitalWrite(13, LOW);
-
-  // link the Arduino pins to the Modbus array
-  io_poll();
-  status_poll();
-
-  // update timers table to disk
-  update_eeprom();
-}
-
-/**
- * Hardware pin mapping:
+ * Setup io pins state
+ *
+ * io pins mapping:
  * D11 - relay a
  * D12 - relay b
  *
@@ -106,112 +51,199 @@ void loop() {
  * A0 - Thermistor (470k resistor pull up)
  */
 void io_setup() {
-  int i;
-  
-  // define i/o
-  pinMode(11, OUTPUT); // relay a
-  pinMode(12, OUTPUT); // relay b
-  pinMode(13, OUTPUT); // led indicator
+    // define i/o
+    pinMode(11, OUTPUT); // relay a
+    pinMode(12, OUTPUT); // relay b
+    pinMode(13, OUTPUT); // led indicator
 
-  // init state register to HIGH
-  bitWrite(au16data[5], 11, 1);
-  bitWrite(au16data[5], 12, 1);
-
-  // use disk to init override register 
-  EEPROM.get(0, au16data[6]);
-
-  /*  read timer table from disk (+7 user data registers)
-   *  start at location 2 (after override register)
-   *  continue another 7 user defined registers after the 96 timer registers
-   *  ( timer registers start at register 7 )
-   */
-  for (i = 0; i < (96 + 7); i++) {
-    EEPROM.get(2 + i * 2, au16data[i + 7]);
-  }
+    // init i/o's state
+    bitWrite(au16data[5], 11, 1);
+    bitWrite(au16data[5], 12, 1);
 }
 
 /**
- *  Link between the Arduino pins and the Modbus array
+ * Read persistent data from eeprom and set registers.
+ * 
+ * register  6 - overide program timers.
+ * registers 7..103 - program timers.
+ * registers 104..109 - user persistent data (e.g. location code, install time).
  */
-void io_poll() {
-  // set digital I/O pins state
-  digitalWrite(11, bitRead(au16data[5], 11));
-  digitalWrite(12, bitRead(au16data[5], 12));
+void read_eeprom() {
+    int i;
 
-  // get analog I/O pins converted values
-  au16data[110] = analogRead(0);
+    // use disk to init override register 
+    EEPROM.get(0, au16data[6]);
+    
+    // program timers
+    for (i = 0; i < 96; i++) {
+        EEPROM.get(2 + i * 2, au16data[i + 7]);
+    }
+    
+    // user persistent data
+    for (i = 96; i < (96 + 7); i++) {
+        EEPROM.get(2 + i * 2, au16data[i + 7]);
+    }
 }
 
 /**
- *  Update communication status and time registers
+ * Update persistent data from eeprom and set registers.
+ *
+ * register  6 - overide program timers.
+ * registers 7..103 - program timers.
+ * registers 104..109 - user persistent data (e.g. location code, install time).
  */
-void status_poll() {
-  uint32_t timeDelta;
+void update_eeprom() {
+    int i;
+    
+    // write override register to disk if changed
+    EEPROM.put(0, au16data[6]);
+    
+    // program timers
+    for (i = 0; i < 96; i++) {
+        EEPROM.put(2 + i * 2, au16data[i + 7]);
+    }
+    
+    // user persistent data
+    for (i = 96; i < (96 + 7); i++) {
+        EEPROM.put(2 + i * 2, au16data[i + 7]);
+    }
+}
 
-  // update time registers
-  timeReg = (uint32_t)au16data[0] * 0x10000 + (uint32_t)au16data[1];
-  timeDelta = abs((int32_t)timeReg - (int32_t)now());
-
-  /*  if time registers are 1 min (60s) off from unit time
-   *  set the unit time using the registers,
-   *  o/w set the registers to match unit time.
-   */
-  if (timeDelta > 60) {
-    // sync Arduino clock to the time received
+/**
+ * Sync unit time.
+ */
+void sync_unit_time() {
     setTime(timeReg);
 
     // if unit has RTC, update RTC
-    if (has_RTC) {
-      RTC.set(timeReg);
-    }
-  } else {
+    if (has_RTC)
+        RTC.set(timeReg);
+}
+
+/**
+ * Sync time registers with unit clock.
+ * 
+ * register 0 - time msb.
+ * register 1 - time lsb.
+ */
+void sync_time_regisers() {
+    
     // sync time registers to Arduino clock
     timeReg = now();
     au16data[0] = (uint16_t)(timeReg >> 16);
     au16data[1] = (uint16_t)(timeReg & 0xffff);
-  }
-
-  // diagnose communication
-  au16data[3] = slave.getOutCnt();
-  au16data[4] = slave.getErrCnt();
 }
 
 /**
- *  Update state register using the timer array
+ * update time registers with unit clock.
+ * 
+ * register 0 - time msb.
+ * register 1 - time lsb.
  */
-void timer_poll(int i) {
-  int part;
-  boolean state;
+void update_time_regisers() {
+    uint32_t timeDelta;
 
-  // check for timer override
-  if (bitRead(au16data[6], i)) return;
+    // update time registers
+    timeReg = (uint32_t)au16data[0] * 0x10000 + (uint32_t)au16data[1];
+    timeDelta = abs((int32_t)timeReg - (int32_t)now());
 
-  // get 24 hour 15min part number
-  part = ((now() / 60) % (24 * 60)) / 15;
-
-  // update state
-  state = bitRead(au16data[part + 7], i);
-  bitWrite(au16data[5], i, state);
+    /*  if time registers are 1 min (60s) off from unit time
+    *  set the unit time using the registers,
+    *  o/w set the registers to match unit time.
+    */
+    if (timeDelta > 60) {
+        sync_unit_time();
+    } else {
+        sync_time_regisers();
+    }
 }
 
 /**
- *  Update eeprom timer table
+ * Setup time from RTC and set time state variables and time registers.
+ * 
+ * timeReg - current time variable.
+ * has_RTC - unit has DS1307RTC clock.
  */
-void update_eeprom() {
-  int i;
+void setup_time() {
+    // if got time from RTC - set unit time and flag that unit has RTC.
+    timeReg = RTC.get();
+    if (timeReg) {
+        setTime(timeReg);
+        has_RTC = true;
+    }
+    
+    // set has_RTC register
+    au16data[2] = has_RTC;
+    sync_time_regisers();
+}
 
-  // write override register to disk if changed
-  EEPROM.put(0, au16data[6]);
+/**
+ * Setup procedure
+ */
+void setup() {
+    // init io pins and registers.
+    io_setup();
+    read_eeprom();
+    setup_time();
+    
+    // start communication
+    slave.begin(BAUD_RATE);
+    
+    // blink for 100ms
+    blinkTime = millis() + 100;
+    digitalWrite(13, HIGH );
+}
 
-  // write timer table to disk if changed (+7 user data registers)
-  for (i = 0; i < (96 + 7); i++) {
-    /*  EEPROM.put notes:
-     *  1 - check value and write only if data change
-     *  2 - write size(data) number of bytes, size(unit_16_t) = 2
-     *
-     *  timer table registers start at register number 7
-     */
-    EEPROM.put(2 + i * 2, au16data[i + 7]);
-  }
+/**
+ *  Run timer logic for one io pin, and update pin state.
+ *
+ * @param pin the io pin number to check.
+ */
+void run_timer_logic_pin(int pin) {
+    int part;
+    boolean state;
+    
+    // check for timer logic override
+    if (bitRead(au16data[6], pin)) return;
+    
+    // get 24hour / 15min part of the day.
+    part = ((now() / 60) % (24 * 60)) / 15;
+    
+    // update io pin state.
+    state = bitRead(au16data[part + 7], pin);
+    bitWrite(au16data[5], pin, state);
+}
+
+/**
+ *  Loop procedure
+ */
+void loop() {
+    // run timer logic and set state of io pins 11 and 12.
+    run_timer_logic_pin(11);
+    run_timer_logic_pin(12);
+    
+    // poll modbus messages
+    // blink led pin on each valid message
+    state = slave.poll(au16data, NUM_REGISTERS);
+    if (state > 4) {
+        blinkTime = millis() + 50;
+        digitalWrite(13, HIGH);
+    }
+    if (millis() > blinkTime) digitalWrite(13, LOW);
+    
+    // set digital io pins state
+    digitalWrite(11, bitRead(au16data[5], 11));
+    digitalWrite(12, bitRead(au16data[5], 12));
+
+    // get analog io pins converted values
+    au16data[110] = analogRead(0);
+    
+    // diagnose communication
+    au16data[3] = slave.getOutCnt();
+    au16data[4] = slave.getErrCnt();
+
+    // update unit time registers and eeprom.
+    update_time_regisers();
+    update_eeprom();
 }
 
