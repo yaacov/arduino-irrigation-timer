@@ -178,23 +178,6 @@ void setup_time() {
 }
 
 /**
- * Setup procedure
- */
-void setup() {
-    // init io pins and registers.
-    io_setup();
-    read_eeprom();
-    setup_time();
-    
-    // start communication
-    slave.begin(BAUD_RATE);
-    
-    // blink for 100ms
-    blinkTime = millis() + 100;
-    digitalWrite(13, HIGH );
-}
-
-/**
  *  Run timer logic for one io pin, and update pin state.
  *
  * @param pin the io pin number to check.
@@ -212,6 +195,23 @@ void run_timer_logic_pin(int pin) {
     // update io pin state.
     state = bitRead(au16data[part + 7], pin);
     bitWrite(au16data[5], pin, state);
+}
+
+/**
+ * Setup procedure
+ */
+void setup() {
+    // init io pins and registers.
+    io_setup();
+    read_eeprom();
+    setup_time();
+    
+    // start communication
+    slave.begin(BAUD_RATE);
+    
+    // blink for 100ms
+    blinkTime = millis() + 100;
+    digitalWrite(13, HIGH );
 }
 
 /**
