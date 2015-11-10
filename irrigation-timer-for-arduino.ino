@@ -34,7 +34,7 @@ Modbus slave(ID, 0, CTRL_PIN);
 int8_t state = 0;
 uint32_t blinkTime;
 uint32_t timeReg;
-boolean has_RTC = false;
+boolean hasRTC = false;
 
 // Unit time registers
 uint16_t au16data[NUM_REGISTERS];
@@ -115,8 +115,8 @@ void update_eeprom() {
 void sync_unit_time() {
     setTime(timeReg);
 
-    // if unit has RTC, update RTC
-    if (has_RTC)
+    // if unit has real time clock, update RTC
+    if (hasRTC)
         RTC.set(timeReg);
 }
 
@@ -162,18 +162,18 @@ void update_time_regisers() {
  * Setup time from RTC and set time state variables and time registers.
  * 
  * timeReg - current time variable.
- * has_RTC - unit has DS1307RTC clock.
+ * hasRTC - unit has DS1307RTC real time clock.
  */
 void setup_time() {
     // if got time from RTC - set unit time and flag that unit has RTC.
     timeReg = RTC.get();
     if (timeReg) {
         setTime(timeReg);
-        has_RTC = true;
+        hasRTC = true;
     }
     
-    // set has_RTC register
-    au16data[2] = has_RTC;
+    // set has real time clock register
+    au16data[2] = hasRTC;
     sync_time_regisers();
 }
 
